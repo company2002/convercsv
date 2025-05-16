@@ -167,6 +167,33 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
     <script>
+        // Função para formatar data
+        function formatarData(data) {
+            if (!data) return '';
+
+            // Remove qualquer caractere que não seja número ou /
+            let dataLimpa = String(data).replace(/[^\d\/]/g, '');
+            let partes = dataLimpa.split('/');
+            
+            if (partes.length !== 3) return data;
+
+            let dia = partes[0].padStart(2, '0');
+            let mes = partes[1].padStart(2, '0');
+            let ano = partes[2];
+
+            // Se o ano tem 2 dígitos, converter para 4 dígitos
+            if (ano.length === 2) {
+                ano = parseInt(ano);
+                // Se ano > 50, considera século 20, senão século 21
+                ano = ano > 50 ? '19' + String(ano).padStart(2, '0') : '20' + String(ano).padStart(2, '0');
+            }
+            
+            // Garante que o ano tenha 4 dígitos
+            ano = String(ano).padStart(4, '20');
+            
+            return `${dia}/${mes}/${ano}`;
+        }
+
         // Elementos da página
         const fileInput = document.getElementById('fileInput');
         const fileInfo = document.getElementById('file-info');
@@ -258,31 +285,42 @@
             const options = {
                 header: 1,
                 raw: false,
-                dateNF: 'yyyy-mm-dd'
+                dateNF: 'yyyy-mm-dd',
+                cellDates: true,
+                defval: ''
             };
             
-            // Converter para array de objetos
-            const rawData = XLSX.utils.sheet_to_json(worksheet, options);
+            // Converter para array de arrays
+            let rawData = XLSX.utils.sheet_to_json(worksheet, options);
             
             // Verificar se temos pelo menos cabeçalho e uma linha
             if (rawData.length < 2) {
                 alert('O arquivo não contém dados suficientes.');
                 return;
-            }            // Encontrar índices das colunas desejadas
-            const headers = rawData[0].map(h => String(h).toLowerCase());
+            }
+            // Garantir que todas as linhas tenham o mesmo número de colunas do cabeçalho
+            const maxCols = rawData[0].length;
+            rawData = rawData.map(row => {
+                const newRow = Array(maxCols).fill('');
+                row.forEach((cell, idx) => {
+                    newRow[idx] = cell === null || cell === undefined ? '' : String(cell).trim();
+                });
+                return newRow;
+            });            // Encontrar índices das colunas na ordem exata da planilha
+            const headers = rawData[0].map(h => String(h).toLowerCase().trim());
             const nameIndex = headers.findIndex(h => h.includes('nome completo'));
             const turmaIndex = headers.findIndex(h => h.includes('turma'));
             const emailIndex = headers.findIndex(h => h.includes('email'));
             const cpfIndex = headers.findIndex(h => h.includes('cpf'));
             const matriculaIndex = headers.findIndex(h => h.includes('matrícula esap') || h.includes('matricula esap'));
             const sexoIndex = headers.findIndex(h => h.includes('sexo'));
-            const nomePaiIndex = headers.findIndex(h => h.includes('nomepai'));
-            const nomeMaeIndex = headers.findIndex(h => h.includes('nomemae'));
-            const dtNascIndex = headers.findIndex(h => h.includes('dtnasc'));
+            const nomePaiIndex = headers.findIndex(h => h.includes('nomepai') || h.includes('nome do pai') || h.includes('nome pai'));
+            const nomeMaeIndex = headers.findIndex(h => h.includes('nomemae') || h.includes('nome da mae') || h.includes('nome mae'));
+            const dtNascIndex = headers.findIndex(h => h.includes('dtnasc') || h.includes('data de nascimento') || h.includes('data nasc'));
             const celularIndex = headers.findIndex(h => h.includes('celular'));
-            const docIdentifIndex = headers.findIndex(h => h.includes('docidentif'));
-            const orgExpIdentIndex = headers.findIndex(h => h.includes('orgexpident'));
-            const dataExpedicaoIndex = headers.findIndex(h => h.includes('dataexpedicao'));
+            const docIdentifIndex = headers.findIndex(h => h.includes('docidentif') || h.includes('documento de identificacao'));
+            const orgExpIdentIndex = headers.findIndex(h => h.includes('orgexpident') || h.includes('orgao expedidor'));
+            const dataExpedicaoIndex = headers.findIndex(h => h.includes('dataexpedicao') || h.includes('data de expedicao'));
             const enderecoIndex = headers.findIndex(h => h.includes('endereco'));
             const bairroIndex = headers.findIndex(h => h.includes('bairro'));
             const cidadeIndex = headers.findIndex(h => h.includes('cidade'));
@@ -302,52 +340,82 @@
             if (missingColumns.length > 0) {
                 alert(`O arquivo deve conter as seguintes colunas obrigatórias: ${missingColumns.join(', ')}`);
                 return;
-            }            // Obter campos selecionados
-            const selectedFields = Array.from(document.querySelectorAll('#fieldSelection input[type="checkbox"]:checked'))
-                .map(checkbox => checkbox.value);
+            }            // Ordenar campos na sequência correta da planilha
+            const orderedFields = [
+                'nome_completo',
+                'turma',
+                'email',
+                'cpf',
+                'matricula_esap',
+                'sexo',
+                'nomepai',
+                'nomemae',
+                'dtnasc',
+                'celular',
+                'docidentif',
+                'orgexpident',
+                'dataexpedicao',
+                'endereco',
+                'bairro',
+                'cidade',
+                'uf',
+                'cep'
+            ];
 
-            // Criar mapa de índices e campos
-            const fieldMap = new Map([
-                ['nome_completo', { index: nameIndex, required: true }],
-                ['turma', { index: turmaIndex, required: true }],
-                ['matricula_esap', { index: matriculaIndex, required: true }],
-                ['email', { index: emailIndex }],
-                ['cpf', { index: cpfIndex }],
-                ['sexo', { index: sexoIndex }],
-                ['nomepai', { index: nomePaiIndex }],
-                ['nomemae', { index: nomeMaeIndex }],
-                ['dtnasc', { index: dtNascIndex }],
-                ['celular', { index: celularIndex }],
-                ['docidentif', { index: docIdentifIndex }],
-                ['orgexpident', { index: orgExpIdentIndex }],
-                ['dataexpedicao', { index: dataExpedicaoIndex }],
-                ['endereco', { index: enderecoIndex }],
-                ['bairro', { index: bairroIndex }],
-                ['cidade', { index: cidadeIndex }],
-                ['uf', { index: ufIndex }],
-                ['cep', { index: cepIndex }]
-            ]);
+            // Filtrar campos baseado na seleção
+            const finalSelectedFields = orderedFields.filter(field => {
+                const checkbox = document.querySelector(`#fieldSelection input[value="${field}"]`);
+                return checkbox && checkbox.checked;
+            });
 
-            // Filtrar e converter os dados
-            workbookData = rawData.map(row => {
-                const values = [];
-                
-                // Adicionar campos na ordem selecionada
-                selectedFields.forEach(field => {
+            // Mapear campos com seus índices
+            const fieldMap = new Map();
+            orderedFields.forEach(field => {
+                let index;
+                switch (field) {
+                    case 'nome_completo': index = nameIndex; break;
+                    case 'turma': index = turmaIndex; break;
+                    case 'email': index = emailIndex; break;
+                    case 'cpf': index = cpfIndex; break;
+                    case 'matricula_esap': index = matriculaIndex; break;
+                    case 'sexo': index = sexoIndex; break;
+                    case 'nomepai': index = nomePaiIndex; break;
+                    case 'nomemae': index = nomeMaeIndex; break;
+                    case 'dtnasc': index = dtNascIndex; break;
+                    case 'celular': index = celularIndex; break;
+                    case 'docidentif': index = docIdentifIndex; break;
+                    case 'orgexpident': index = orgExpIdentIndex; break;
+                    case 'dataexpedicao': index = dataExpedicaoIndex; break;
+                    case 'endereco': index = enderecoIndex; break;
+                    case 'bairro': index = bairroIndex; break;
+                    case 'cidade': index = cidadeIndex; break;
+                    case 'uf': index = ufIndex; break;
+                    case 'cep': index = cepIndex; break;
+                }
+                fieldMap.set(field, { index, required: ['nome_completo', 'turma', 'matricula_esap'].includes(field) });
+            });
+
+            // Filtrar e converter os dados mantendo a ordem
+            workbookData = rawData.map((row, idx) => {
+                if (idx === 0) return finalSelectedFields;
+                return finalSelectedFields.map(field => {
                     const fieldInfo = fieldMap.get(field);
-                    if (!fieldInfo) return;
-
-                    if (field === 'sexo' && row[fieldInfo.index]) {
-                        const sexoValue = String(row[fieldInfo.index]).trim().toUpperCase();
-                        values.push(sexoValue === 'M' ? 'MASCULINO' : 
-                                  sexoValue === 'F' ? 'FEMININO' : 
-                                  String(row[fieldInfo.index]));
-                    } else {
-                        values.push(row[fieldInfo.index] || '');
+                    if (!fieldInfo || typeof fieldInfo.index !== 'number' || fieldInfo.index < 0) {
+                        return '';
                     }
+                    
+                    let val = row[fieldInfo.index] || '';
+                    
+                    // Processamento específico por tipo de campo
+                    if (field === 'sexo') {
+                        const sexoValue = String(val).trim().toUpperCase();
+                        val = sexoValue === 'M' ? 'Masculino' : sexoValue === 'F' ? 'Feminino' : val;
+                    } else if (field === 'dtnasc' || field === 'dataexpedicao') {
+                        val = formatarData(val);
+                    }
+                    
+                    return val;
                 });
-
-                return values;
             });
 
             // Criar CSV do conteúdo original
@@ -419,11 +487,34 @@
                 return;
             }
 
-            // Obter campos selecionados
-            const selectedFields = Array.from(document.querySelectorAll('#fieldSelection input[type="checkbox"]:checked'))
-                .map(checkbox => checkbox.value);
+            // Obter campos selecionados na ordem correta da planilha
+            const orderedFields = [
+                'nome_completo',
+                'turma',
+                'email',
+                'cpf',
+                'matricula_esap',
+                'sexo',
+                'nomepai',
+                'nomemae',
+                'dtnasc',
+                'celular',
+                'docidentif',
+                'orgexpident',
+                'dataexpedicao',
+                'endereco',
+                'bairro',
+                'cidade',
+                'uf',
+                'cep'
+            ];
 
-            // Mapear campos selecionados para cabeçalhos transformados
+            const selectedFields = orderedFields.filter(field => {
+                const checkbox = document.querySelector(`#fieldSelection input[value="${field}"]`);
+                return checkbox && checkbox.checked;
+            });
+
+            // Mapear campos selecionados para cabeçalhos transformados na ordem correta
             const headerMap = {
                 'nome_completo': ['username', 'firstname', 'lastname'],
                 'turma': ['cohort1'],
@@ -445,7 +536,7 @@
                 'cep': ['cep']
             };
 
-            // Criar lista de cabeçalhos baseada nos campos selecionados
+            // Criar lista de cabeçalhos mantendo a ordem dos campos selecionados
             const transformedHeaders = selectedFields.flatMap(field => headerMap[field] || []);
             const transformedRows = [transformedHeaders];
 
@@ -453,7 +544,7 @@
                 const row = workbookData[i];
                 if (row.length === 0) continue;
 
-                // Extrair valores da linha original
+                // Extrair valores da linha original preservando a ordem
                 const values = {};
                 selectedFields.forEach((field, index) => {
                     values[field] = row[index] || '';
@@ -469,10 +560,8 @@
                 const firstName = nameParts[0];
                 const lastName = nameParts.slice(1).join(' ');
 
-                // Criar linha transformada mantendo apenas os campos selecionados
+                // Criar linha transformada mantendo a ordem dos campos
                 const transformedRow = [];
-                
-                // Adicionar campos na ordem correta dos cabeçalhos
                 transformedHeaders.forEach(header => {
                     switch(header) {
                         case 'username':
@@ -488,13 +577,25 @@
                             transformedRow.push(values.email || `${values.matricula_esap}@example123.com`);
                             break;
                         case 'cohort1':
-                            transformedRow.push(`turma_${values.turma.toLowerCase()}`);
+                            transformedRow.push(values.turma ? `turma_${values.turma.toLowerCase()}` : '');
+                            break;
+                        case 'data_nascimento':
+                            transformedRow.push(formatarData(values.dtnasc));
+                            break;
+                        case 'data_expedicao':
+                            transformedRow.push(formatarData(values.dataexpedicao));
+                            break;
+                        case 'sexo':
+                            const sexoValue = String(values.sexo || '').trim().toUpperCase();
+                            transformedRow.push(sexoValue === 'M' ? 'Masculino' : 
+                                             sexoValue === 'F' ? 'Feminino' : 
+                                             values.sexo || '');
                             break;
                         default:
                             // Para outros campos, usar o valor direto do mapeamento
-                            const fieldName = Object.keys(headerMap).find(key => 
-                                headerMap[key].includes(header)
-                            );
+                            const fieldName = Object.entries(headerMap).find(([_, headers]) => 
+                                headers.includes(header)
+                            )?.[0];
                             transformedRow.push(values[fieldName] || '');
                     }
                 });
