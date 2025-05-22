@@ -512,13 +512,11 @@
             const selectedFields = orderedFields.filter(field => {
                 const checkbox = document.querySelector(`#fieldSelection input[value="${field}"]`);
                 return checkbox && checkbox.checked;
-            });
-
-            // Mapear campos selecionados para cabeçalhos transformados na ordem correta
+            });            // Mapear campos selecionados para cabeçalhos transformados na ordem correta
             const headerMap = {
                 'nome_completo': ['username', 'firstname', 'lastname'],
                 'turma': ['cohort1'],
-                'matricula_esap': ['matricula_esap'],
+                'matricula_esap': [], // Removido pois já está sendo usado como username
                 'email': ['email'],
                 'cpf': ['cpf'],
                 'sexo': ['sexo'],
